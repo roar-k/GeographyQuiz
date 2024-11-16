@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guess the Country Locations</title>
+    <style>
+        /* Make sure the body and html elements take up the full height */
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+
+        /* Set the map to fill the full screen */
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+
+        .legend {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            z-index: 999;
+            max-width: 300px;
+        }
+
+        .directions-box {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            z-index: 1000;
+            max-width: 250px;
+        }
+
+        .directions-box h3 {
+            margin-top: 0;
+        }
+
+        .directions-box p {
+            margin-bottom: 10px;
+        }
+
+        .result {
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1000;
+            display: none;
+        }
+
+        /* Styling for the pin hover effect */
+        .leaflet-marker-icon {
+            transition: opacity 0.3s;
+        }
+
+        .leaflet-marker-icon:hover {
+            opacity: 0.5; /* Make the marker semi-transparent on hover */
+        }
+
+        .pin-number {
+            position: absolute;
+            color: black; /* Make the pin numbers black */
+            font-weight: bold;
+            font-size: 12px;
+            text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.7); /* Shadow to make numbers more visible */
+            pointer-events: none;
+        }
+
+        /* Make the country names bold and underlined in the directions */
+        .directions-box p strong {
+            font-weight: bold;
+            text-decoration: underline;
+        }
+
+        /* New box for "Goodluck" text */
+        .goodluck-box {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 10px;
+            border: 2px solid #ccc;
+            border-radius: 5px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+    </style>
+    <!-- Leaflet CSS -->
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        crossorigin=""
+    />
+</head>
+<body>
+    <div id="map"></div>
+    <div class="legend">
+        <h3>Countries to Guess</h3>
+        <ul>
+            <li>1. Venezuela</li>
+            <li>2. Malaysia</li>
+            <li>3. Slovenia</li>
+            <li>4. Syria</li>
+            <li>5. Jordan</li>
+            <li>6. Colombia</li>
+            <li>7. Italy</li>
+            <li>8. Turkey</li>
+            <li>9. Croatia</li>
+            <li>10. Greece</li>
+            <li>11. Thailand</li>
+            <li>12. Israel</li>
+            <li>13. Ireland</li>
+            <li>14. India</li>
+            <li>15. Iceland</li>
+        </ul>
+    </div>
+    <div class="directions-box">
+        <h3>Directions</h3>
+        <p id="current-country">Click on the map to place the pin for <strong>Venezuela</strong>.</p>
+    </div>
+    <div class="result">
+        <h3>Result</h3>
+        <p id="result-message"></p>
+        <button onclick="restartGame()">Play Again</button>
+    </div>
+    <!-- "Goodluck" text box -->
+    <div class="goodluck-box">
+        Goodluck :) - Ben
+    </div>
+    <!-- Leaflet JS -->
+    <script
+        src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        crossorigin=""
+    ></script>
+    <script>
+        const countries = [
+            { name: "Venezuela", coords: [6.4238, -66.5897] },
+            { name: "Malaysia", coords: [4.2105, 101.9758] },
+            { name: "Slovenia", coords: [46.1512, 14.9955] },
+            { name: "Syria", coords: [34.8021, 38.9968] },
+            { name: "Jordan", coords: [30.5852, 36.2384] },
+            { name: "Colombia", coords: [4.5709, -74.2973] },
+            { name: "Italy", coords: [41.8719, 12.5674] },
+            { name: "Turkey", coords: [38.9637, 35.2433] },
+            { name: "Croatia", coords: [45.1, 15.2] },
+            { name: "Greece", coords: [39.0742, 21.8243] },
+            { name: "Thailand", coords: [15.8700, 100.9925] },
+            { name: "Israel", coords: [31.0461, 34.8516] },
+            { name: "Ireland", coords: [53.4129, -8.2439] },
+            { name: "India", coords: [20.5937, 78.9629] },
+            { name: "Iceland", coords: [64.9631, -19.0208] },
+        ];
+
+        let userPins = [];
+        let currentCountryIndex = 0;
+
+        const map = L.map('map', {
+            center: [20, 0], // Start in the middle of the world
+            zoom: 2, // Initial zoom level (reverted back to 2)
+            maxZoom: 5, // Maximum zoom level (prevents zooming out too far)
+            minZoom: 2, // Minimum zoom level (keeps map at a reasonable zoom)
+            maxBounds: [
+                [60, -180], // Southwest corner (exclude Antarctica)
+                [-60, 180],  // Northeast corner (exclude the top ocean)
+            ],
+            maxBoundsViscosity: 1.0, // Prevent the map from being dragged out of bounds
+            worldCopyJump: false,    // Prevent horizontal map repetition
+            dragging: true,          // Enable dragging to allow the user to move the map
+            zoomControl: false,      // Disable zoom control
+            scrollWheelZoom: false,  // Disable zooming by scrolling
+            doubleClickZoom: false,  // Disable zooming by double-clicking
+        });
+
+        // Add OpenStreetMap tiles with no labels
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        map.on('click', function(e) {
+            if (userPins.length < countries.length) {
+                const latLng = e.latlng;
+                const marker = L.marker(latLng).addTo(map);
+
+                // Create a number overlay on the marker
+                const pinNumber = L.divIcon({
+                    className: 'pin-number',
+                    html: `${userPins.length + 1}`,
+                    iconSize: [20, 20],
+                });
+                marker.setIcon(pinNumber);
+
+                userPins.push(latLng);
+
+                // Update the directions box to the next country
+                if (userPins.length < countries.length) {
+                    document.getElementById('current-country').innerHTML = `Click on the map to place the pin for <strong>${countries[userPins.length].name}</strong>.`;
+                }
+
+                // If all pins are placed, show the results
+                if (userPins.length === countries.length) {
+                    setTimeout(checkResults, 1000);
+                }
+            }
+        });
+
+        function checkResults() {
+            let correct = 0;
+            userPins.forEach((userPin, index) => {
+                const correctCoords = countries[index].coords;
+                const distance = map.distance(userPin, correctCoords);
+                if (distance < 500000) { // Within 500 km tolerance
+                    correct++;
+                }
+            });
+            showResults(correct);
+        }
+
+        function showResults(correctCount) {
+            const resultMessage = `You got ${correctCount} out of ${countries.length} correct!`;
+            document.getElementById('result-message').textContent = resultMessage;
+            document.querySelector('.result').style.display = 'block';
+        }
+
+        function restartGame() {
+            location.reload(); // Reload the page to restart the game
+        }
+    </script>
+</body>
+</html>
